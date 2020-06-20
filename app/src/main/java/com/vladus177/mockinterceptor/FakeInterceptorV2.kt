@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
 
@@ -27,7 +28,12 @@ class FakeInterceptorV2 constructor(private val context: Context, private val fi
         try {
             val jsonFile: String =
                 context.assets.open(fileName).bufferedReader().use { it.readText() }
-            val jsonObject = JSONObject(jsonFile)
+            lateinit var jsonObject: Any
+            if (jsonFile.trim().first() == '[') {
+                jsonObject = JSONArray(jsonFile)
+            } else if (jsonFile.trim().first() == '{') {
+                jsonObject = JSONObject(jsonFile)
+            }
             builder.body(
                 jsonObject.toString().toByteArray().toResponseBody(mContentType.toMediaTypeOrNull())
             )

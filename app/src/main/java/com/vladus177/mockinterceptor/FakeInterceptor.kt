@@ -1,68 +1,58 @@
 package com.vladus177.mockinterceptor
 
 import android.annotation.SuppressLint
-import android.content.ContentValues
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import okhttp3.Interceptor
-import okhttp3.Interceptor.Chain
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Protocol
 import okhttp3.Response
-import okhttp3.Response.Builder
 import okhttp3.ResponseBody.Companion.toResponseBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
-import java.net.URI
-import java.util.*
-
 
 class FakeInterceptor constructor(private val context: Context) : Interceptor {
 
     private var mContentType = "application/json"
 
-
     @SuppressLint("DefaultLocale")
-    override fun intercept(chain: Chain): Response {
-        val listSuggestionFileName: List<String> = ArrayList()
+    override fun intercept(chain: Interceptor.Chain): Response {
+        SystemClock.sleep(LOAD_TIME)
         val method = chain.request().method.toLowerCase()
+        val defaultFileName: String? = getFileName(chain)
         var response: Response? = null
         val uri = chain.request().url.toUri()
-        val defaultFileName: String? = getFileName(chain)
-
+        val mockDataPath = uri.host + uri.path + "/".toLowerCase()
         Log.d(TAG, "--> Request url: [" + method.toUpperCase() + "]" + uri.toString())
-        SystemClock.sleep(LOAD_TIME)
-        if (defaultFileName != null) {
-            val fileName: String = getFilePath(uri, defaultFileName)
 
-            Log.d(ContentValues.TAG, "Read data from file: $fileName")
-
-            try {
-                val jsonFile: String =
-                    context.assets.open(fileName).bufferedReader().use { it.readText() }
-                val jsonObject = JSONObject(jsonFile)
-                Log.d(ContentValues.TAG, "Response: $jsonObject")
-
-                val builder = Builder()
-                builder.request(chain.request())
-                builder.protocol(Protocol.HTTP_1_0)
-                builder.addHeader("content-type", mContentType)
-                builder.body(
-                    jsonObject.toString().toByteArray()
-                        .toResponseBody(mContentType.toMediaTypeOrNull())
-                )
-                builder.code(200)
-                builder.message(jsonObject.toString())
-                response = builder.build()
-            } catch (e: IOException) {
-                Log.e(TAG, e.message, e)
+        try {
+            Log.d(TAG, "Read data from file: $mockDataPath + $defaultFileName")
+            val jsonFile: String =
+                context.assets.open(mockDataPath + defaultFileName).bufferedReader()
+                    .use { it.readText() }
+            lateinit var jsonObject: Any
+            if (jsonFile.trim().first() == '[') {
+                jsonObject = JSONArray(jsonFile)
+            } else if (jsonFile.trim().first() == '{') {
+                jsonObject = JSONObject(jsonFile)
             }
-        } else {
-            for (file in listSuggestionFileName) {
-                Log.e(ContentValues.TAG, "File not exist: " + getFilePath(uri, file))
-            }
-            response = chain.proceed(chain.request())
+
+            Log.d(TAG, "Response: $jsonObject")
+
+            val builder = Response.Builder()
+            builder.request(chain.request())
+            builder.protocol(Protocol.HTTP_1_0)
+            builder.addHeader("content-type", mContentType)
+            builder.body(
+                jsonObject.toString().toByteArray().toResponseBody(mContentType.toMediaTypeOrNull())
+            )
+            builder.code(200)
+            builder.message(jsonObject.toString())
+            response = builder.build()
+        } catch (e: IOException) {
+            Log.e(TAG, e.message, e)
         }
 
         Log.d(TAG, "<-- END [" + method.toUpperCase() + "]" + uri.toString())
@@ -70,19 +60,10 @@ class FakeInterceptor constructor(private val context: Context) : Interceptor {
     }
 
     @SuppressLint("DefaultLocale")
-    private fun getFileName(chain: Chain): String? {
+    private fun getFileName(chain: Interceptor.Chain): String {
         val fileName =
             chain.request().url.pathSegments[chain.request().url.pathSegments.size - 1]
         return if (fileName.isEmpty()) "index$FILE_EXTENSION" else fileName + "_" + chain.request().method.toLowerCase() + FILE_EXTENSION
-    }
-
-    private fun getFilePath(uri: URI, fileName: String): String {
-        val path: String = if (uri.path.lastIndexOf('/') != uri.path.length - 1) {
-            uri.path.substring(0, uri.path.lastIndexOf('/') + 1)
-        } else {
-            uri.path
-        }
-        return uri.host.toString() + path + fileName
     }
 
     companion object {
