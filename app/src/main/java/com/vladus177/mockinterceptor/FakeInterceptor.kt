@@ -12,6 +12,7 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.Response.Builder
 import okhttp3.ResponseBody.Companion.toResponseBody
+import org.json.JSONObject
 import java.io.*
 import java.net.URI
 import java.util.*
@@ -38,25 +39,21 @@ class FakeInterceptor constructor(private val context: Context) : Interceptor {
             Log.d(ContentValues.TAG, "Read data from file: $fileName")
 
             try {
-                val inputStream: InputStream = context.assets.open(fileName)
-                val r = BufferedReader(InputStreamReader(inputStream) as Reader)
-                val responseStringBuilder = StringBuilder()
-                var line: String?
-                while (r.readLine().also { line = it } != null) {
-                    responseStringBuilder.append(line).append('\n')
-                }
-                Log.d(ContentValues.TAG, "Response: $responseStringBuilder")
+                val jsonFile: String =
+                    context.assets.open(fileName).bufferedReader().use { it.readText() }
+                val jsonObject = JSONObject(jsonFile)
+                Log.d(ContentValues.TAG, "Response: $jsonObject")
 
                 val builder = Builder()
                 builder.request(chain.request())
                 builder.protocol(Protocol.HTTP_1_0)
                 builder.addHeader("content-type", mContentType)
                 builder.body(
-                    responseStringBuilder.toString().toByteArray()
+                    jsonObject.toString().toByteArray()
                         .toResponseBody(mContentType.toMediaTypeOrNull())
                 )
                 builder.code(200)
-                builder.message(responseStringBuilder.toString())
+                builder.message(jsonObject.toString())
                 response = builder.build()
             } catch (e: IOException) {
                 Log.e(TAG, e.message, e)
